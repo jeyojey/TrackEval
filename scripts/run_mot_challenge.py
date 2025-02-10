@@ -1,8 +1,9 @@
 
 """ run_mot_challenge.py
+    # for two scenarios comined: mot and mot with segmentation. More detail in 'SPECIFY_DATASET' option.
 
 Run example:
-run_mot_challenge.py --USE_PARALLEL False --METRICS Hota --TRACKERS_TO_EVAL Lif_T
+run_mot_challenge.py --USE_PARALLEL False --METRICS Hota --TRACKERS_TO_EVAL MPNTrack
 
 Command Line Arguments: Defaults, # Comments
     Eval arguments:
@@ -17,6 +18,7 @@ Command Line Arguments: Defaults, # Comments
         'OUTPUT_DETAILED': True,
         'PLOT_CURVES': True,
     Dataset arguments:
+        'SPECIFY_DATASET': None # Required: 'MOT' or 'MOTS'. Choose the working dataset for
         'GT_FOLDER': os.path.join(code_path, 'data/gt/mot_challenge/'),  # Location of GT data
         'TRACKERS_FOLDER': os.path.join(code_path, 'data/trackers/mot_challenge/'),  # Trackers location
         'OUTPUT_FOLDER': None,  # Where to save eval results (if None, same as TRACKERS_FOLDER)
@@ -29,8 +31,15 @@ Command Line Arguments: Defaults, # Comments
         'DO_PREPROC': True,  # Whether to perform preprocessing (never done for 2D_MOT_2015)
         'TRACKER_SUB_FOLDER': 'data',  # Tracker files are in TRACKER_FOLDER/tracker_name/TRACKER_SUB_FOLDER
         'OUTPUT_SUB_FOLDER': '',  # Output files are saved in OUTPUT_FOLDER/tracker_name/OUTPUT_SUB_FOLDER
+        'SEQMAP_FOLDER': None,  # Where seqmaps are found (if None, GT_FOLDER/seqmaps)
+        'SEQMAP_FILE': None,  # Directly specify seqmap file (if none use seqmap_folder/MOTS-split_to_eval)
+        'SEQ_INFO': None,  # If not None, directly specify sequences to eval and their number of timesteps
+        'GT_LOC_FORMAT': '{gt_folder}/{seq}/gt/gt.txt',  # '{gt_folder}/{seq}/gt/gt.txt'
+        'SKIP_SPLIT_FOL': False,    # If False, data is in GT_FOLDER/MOTS-SPLIT_TO_EVAL/ and in
+                                    # TRACKERS_FOLDER/MOTS-SPLIT_TO_EVAL/tracker/
+                                    # If True, then the middle 'MOTS-split' folder is skipped for both.
     Metric arguments:
-        'METRICS': ['HOTA', 'CLEAR', 'Identity', 'VACE']
+        'METRICS': ['HOTA', 'CLEAR', 'Identity', 'VACE', 'JAndF']
 """
 
 import sys
@@ -41,21 +50,38 @@ from multiprocessing import freeze_support
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import trackeval  # noqa: E402
 
+from trackeval.metrics import MaxSim
+print(MaxSim)
 if __name__ == '__main__':
     freeze_support()
+
+    ######## My CODE HERE ########
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--SPECIFY_DATASET', required='True', choices=['MOT', 'MOTS'], help="Please, use one of the options: 'MOT' or 'MOTS'.")
+    args, unknown = parser.parse_known_args()
+    dataset_t = args.SPECIFY_DATASET
+
+    #default METRICS for each scenario
+    if dataset_t == "MOT":
+        default_dataset_config = trackeval.datasets.MotChallenge2DBox.get_default_dataset_config()
+        default_metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity']}
+    elif dataset_t == "MOTS":
+        default_dataset_config = trackeval.datasets.MOTSChallenge.get_default_dataset_config()
+        default_metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity', 'VACE', 'JAndF']}
+
+    new_dataset_config = {'SPECIFY_DATASET': dataset_t}
+    ########################################################
 
     # Command line interface:
     default_eval_config = trackeval.Evaluator.get_default_eval_config()
     default_eval_config['DISPLAY_LESS_PROGRESS'] = False
-    default_dataset_config = trackeval.datasets.MotChallenge2DBox.get_default_dataset_config()
-    default_metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity'], 'THRESHOLD': 0.5}
-    config = {**default_eval_config, **default_dataset_config, **default_metrics_config}  # Merge default configs
-    parser = argparse.ArgumentParser()
+    config = {**default_eval_config, **default_dataset_config, **default_metrics_config, **new_dataset_config}  # Merge default configs
     for setting in config.keys():
-        if type(config[setting]) == list or type(config[setting]) == type(None):
-            parser.add_argument("--" + setting, nargs='+')
-        else:
-            parser.add_argument("--" + setting)
+        if setting != "SPECIFY_DATASET":
+            if type(config[setting]) == list or type(config[setting]) == type(None):
+                parser.add_argument("--" + setting, nargs='+')
+            else:
+                parser.add_argument("--" + setting)
     args = parser.parse_args().__dict__
     for setting in args.keys():
         if args[setting] is not None:
@@ -81,9 +107,9 @@ if __name__ == '__main__':
 
     # Run code
     evaluator = trackeval.Evaluator(eval_config)
-    dataset_list = [trackeval.datasets.MotChallenge2DBox(dataset_config)]
+    dataset_list = [trackeval.datasets.MotChallenge2DBox(dataset_config)] if dataset_t == "MOT" else [trackeval.datasets.MOTSChallenge(dataset_config)]
     metrics_list = []
-    for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity, trackeval.metrics.VACE]:
+    for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity, trackeval.metrics.VACE, trackeval.metrics.MaxSim]:
         if metric.get_name() in metrics_config['METRICS']:
             metrics_list.append(metric(metrics_config))
     if len(metrics_list) == 0:
