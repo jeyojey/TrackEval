@@ -26,7 +26,7 @@ trackers = [
     'GNNMatch',
     'IA',
     'ISE_MOT17R',
-    'Lif_T',
+    'MPNTrack',
     'Lif_TsimInt',
     'LPC_MOT',
     'MAT',

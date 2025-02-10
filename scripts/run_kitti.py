@@ -1,8 +1,11 @@
 
 """ run_kitti.py
+    # combined run including MOTS
 
 Run example:
-run_kitti.py --USE_PARALLEL False --METRICS Hota --TRACKERS_TO_EVAL CIWT
+run_kitti.py --USE_PARALLEL False --METRICS HOTA --TRACKERS_TO_EVAL CIWT
+python scripts/run_kitti_mots.py --GT_FOLDER data/gt/kitti/kitti_mots_train --METRICS HOTA
+
 
 Command Line Arguments: Defaults, # Comments
     Eval arguments:
@@ -17,7 +20,7 @@ Command Line Arguments: Defaults, # Comments
         'OUTPUT_DETAILED': True,
         'PLOT_CURVES': True,
     Dataset arguments:
-        'GT_FOLDER': os.path.join(code_path, 'data/gt/kitti/kitti_2d_box_train'),  # Location of GT data
+        'GT_FOLDER': ['os.path.join(code_path, 'data/gt/kitti/kitti_2d_box_train')', 'os.path.join(code_path, 'data/gt/kitti/kitti_mots')'] # Location of GT data
         'TRACKERS_FOLDER': os.path.join(code_path, 'data/trackers/kitti/kitti_2d_box_train/'),  # Trackers location
         'OUTPUT_FOLDER': None,  # Where to save eval results (if None, same as TRACKERS_FOLDER)
         'TRACKERS_TO_EVAL': None,  # Filenames of trackers to eval (if None, all in folder)
@@ -27,8 +30,13 @@ Command Line Arguments: Defaults, # Comments
         'PRINT_CONFIG': True,  # Whether to print current config
         'TRACKER_SUB_FOLDER': 'data',  # Tracker files are in TRACKER_FOLDER/tracker_name/TRACKER_SUB_FOLDER
         'OUTPUT_SUB_FOLDER': ''  # Output files are saved in OUTPUT_FOLDER/tracker_name/OUTPUT_SUB_FOLDER
+        'SEQMAP_FOLDER': None,  # Where seqmaps are found (if None, GT_FOLDER)
+        'SEQMAP_FILE': None,    # Directly specify seqmap file (if none use seqmap_folder/split_to_eval.seqmap)
+        'SEQ_INFO': None,  # If not None, directly specify sequences to eval and their number of timesteps
+        'GT_LOC_FORMAT': '{gt_folder}/instances_txt/{seq}.txt',  # format of gt localization
+
     Metric arguments:
-        'METRICS': ['Hota','Clear', 'ID', 'Count']
+        'METRICS': ['HOTA','CLEAR', 'Identity'] # 'Count']
 """
 
 import sys
@@ -42,18 +50,33 @@ import trackeval  # noqa: E402
 if __name__ == '__main__':
     freeze_support()
 
+    ######## My CODE HERE ########
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--SPECIFY_DATASET', required='True', choices=['MOT', 'MOTS'], help="Please, use one of the options: 'MOT' or 'MOTS'.")
+    args, unknown = parser.parse_known_args()
+    dataset_t = args.SPECIFY_DATASET
+    if dataset_t == "MOT":
+        default_dataset_config = trackeval.datasets.Kitti2DBox.get_default_dataset_config()
+        GT_FOLDER = 'data/gt/kitti/kitti_2d_box_train'
+    elif dataset_t == "MOTS":
+        default_dataset_config = trackeval.datasets.KittiMOTS.get_default_dataset_config()
+        GT_FOLDER = 'data/gt/kitti/kitti_mots_train'
+
+    new_dataset_config = {'SPECIFY_DATASET': dataset_t, 'GT_FOLDER': GT_FOLDER}
+    ########################################################
+
     # Command line interface:
     default_eval_config = trackeval.Evaluator.get_default_eval_config()
     default_eval_config['DISPLAY_LESS_PROGRESS'] = False
-    default_dataset_config = trackeval.datasets.Kitti2DBox.get_default_dataset_config()
     default_metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity']}
-    config = {**default_eval_config, **default_dataset_config, **default_metrics_config}  # Merge default configs
-    parser = argparse.ArgumentParser()
+    config = {**default_eval_config, **default_dataset_config, **default_metrics_config, **new_dataset_config}  # Merge default configs
+
     for setting in config.keys():
-        if type(config[setting]) == list or type(config[setting]) == type(None):
-            parser.add_argument("--" + setting, nargs='+')
-        else:
-            parser.add_argument("--" + setting)
+        if setting != "SPECIFY_DATASET":
+            if type(config[setting]) == list or type(config[setting]) == type(None):
+                parser.add_argument("--" + setting, nargs='+')
+            else:
+                parser.add_argument("--" + setting)
     args = parser.parse_args().__dict__
     for setting in args.keys():
         if args[setting] is not None:
@@ -77,9 +100,9 @@ if __name__ == '__main__':
 
     # Run code
     evaluator = trackeval.Evaluator(eval_config)
-    dataset_list = [trackeval.datasets.Kitti2DBox(dataset_config)]
+    dataset_list = [trackeval.datasets.Kitti2DBox(dataset_config)] if dataset_t == "MOT" else [trackeval.datasets.KittiMOTS(dataset_config)]
     metrics_list = []
-    for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity]:
+    for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity, trackeval.metrics.JAndF]:
         if metric.get_name() in metrics_config['METRICS']:
             metrics_list.append(metric())
     if len(metrics_list) == 0:

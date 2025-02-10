@@ -2,7 +2,7 @@
 """ run_mot_challenge.py
 
 Run example:
-run_mot_challenge.py --USE_PARALLEL False --METRICS Hota --TRACKERS_TO_EVAL Lif_T
+run_mot_challenge.py --USE_PARALLEL False --METRICS Hota --TRACKERS_TO_EVAL MPNTrack
 
 Command Line Arguments: Defaults, # Comments
     Eval arguments:
